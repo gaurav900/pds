@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Your Tasks</h1>
+<table>
+    <tr>
+        <th>Order ID</th>
+        <th>Client</th>
+        <th>Status</th>
+    </tr>
+    {% for task in tasks %}
+    <tr>
+        <td>{{ task.order_id }}</td>
+        <td>{{ task.client_username }}</td>
+        <td>{{ task.status }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
