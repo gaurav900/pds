@@ -1,0 +1,754 @@
+PDS PROJECT PART 3
+
+Folder Structure - CSHARP
+
+welcomehome/
+├── app.py
+├── templates/
+│   ├── base.html
+│   ├── login.html
+│   ├── main.html
+│   ├── find_item.html
+│   └── find_order.html
+└── static/
+
+
+APP.PY - PYTHON
+
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+import pymysql
+import bcrypt
+
+app = Flask(__name__)
+app.secret_key = 'your_secret_key'
+
+# Database connection
+def get_db_connection():
+    return pymysql.connect(
+        host='localhost',
+        user='root',
+        password='password',
+        db='welcomehome',
+        charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
+
+# Route: Home Page
+@app.route('/')
+def index():
+    if 'user_id' in session:
+        return render_template('main.html', username=session['username'])
+    return redirect(url_for('login'))
+
+# Route: Login
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            sql = "SELECT id, username, password_hash FROM users WHERE username = %s"
+            cursor.execute(sql, (username,))
+            user = cursor.fetchone()
+
+        connection.close()
+
+        if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            return redirect(url_for('index'))
+        else:
+            flash('Invalid username or password', 'danger')
+
+    return render_template('login.html')
+
+# Route: Logout
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You have been logged out', 'success')
+    return redirect(url_for('login'))
+
+# Route: Find Single Item
+@app.route('/find_item', methods=['GET', 'POST'])
+def find_item():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    item_locations = None
+    if request.method == 'POST':
+        item_id = request.form['item_id']
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            sql = """
+                SELECT locations.name AS location_name 
+                FROM items 
+                JOIN item_locations ON items.id = item_locations.item_id
+                JOIN locations ON item_locations.location_id = locations.id
+                WHERE items.id = %s
+            """
+            cursor.execute(sql, (item_id,))
+            item_locations = cursor.fetchall()
+        connection.close()
+
+    return render_template('find_item.html', item_locations=item_locations)
+
+# Route: Find Order Items
+@app.route('/find_order', methods=['GET', 'POST'])
+def find_order():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    order_items = None
+    if request.method == 'POST':
+        order_id = request.form['order_id']
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            sql = """
+                SELECT items.name AS item_name, locations.name AS location_name
+                FROM orders
+                JOIN order_items ON orders.id = order_items.order_id
+                JOIN items ON order_items.item_id = items.id
+                JOIN item_locations ON items.id = item_locations.item_id
+                JOIN locations ON item_locations.location_id = locations.id
+                WHERE orders.id = %s
+            """
+            cursor.execute(sql, (order_id,))
+            order_items = cursor.fetchall()
+        connection.close()
+
+    return render_template('find_order.html', order_items=order_items)
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+
+Templates
+templates/base.html    -- html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WelcomeHome</title>
+</head>
+<body>
+    <nav>
+        <a href="/">Home</a>
+        {% if session.get('user_id') %}
+            <a href="/find_item">Find Item</a>
+            <a href="/find_order">Find Order</a>
+            <a href="/logout">Logout</a>
+        {% else %}
+            <a href="/login">Login</a>
+        {% endif %}
+    </nav>
+    <hr>
+    <div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul>
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+    </div>
+    {% block content %}{% endblock %}
+</body>
+</html>
+
+
+templates/login.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Login</h1>
+<form method="POST">
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" required>
+    <br>
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" required>
+    <br>
+    <button type="submit">Login</button>
+</form>
+{% endblock %}
+
+
+templates/main.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Welcome, {{ username }}!</h1>
+<p>Use the navigation bar to access features.</p>
+{% endblock %}
+
+
+templates/find_item.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Find Item</h1>
+<form method="POST">
+    <label for="item_id">Item ID:</label>
+    <input type="text" id="item_id" name="item_id" required>
+    <button type="submit">Search</button>
+</form>
+{% if item_locations %}
+    <h2>Locations</h2>
+    <ul>
+    {% for location in item_locations %}
+        <li>{{ location.location_name }}</li>
+    {% endfor %}
+    </ul>
+{% endif %}
+{% endblock %}
+
+
+Database Setup
+Example Tables
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE locations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE item_locations (
+    item_id INT,
+    location_id INT,
+    PRIMARY KEY (item_id, location_id),
+    FOREIGN KEY (item_id) REFERENCES items(id),
+    FOREIGN KEY (location_id) REFERENCES locations(id)
+);
+
+CREATE TABLE orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT,
+    FOREIGN KEY (client_id) REFERENCES users(id)
+);
+
+CREATE TABLE order_items (
+    order_id INT,
+    item_id INT,
+    PRIMARY KEY (order_id, item_id),
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (item_id) REFERENCES items(id)
+);
+
+
+Feature 1: Accept Donation
+Backend Code
+Add this route to app.py:
+
+
+# Route: Accept Donation
+@app.route('/accept_donation', methods=['GET', 'POST'])
+def accept_donation():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        donor_id = request.form['donor_id']
+        item_name = request.form['item_name']
+        location_name = request.form['location_name']
+
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                # Verify donor exists
+                cursor.execute("SELECT id FROM donors WHERE id = %s", (donor_id,))
+                donor = cursor.fetchone()
+                if not donor:
+                    flash("Donor does not exist!", 'danger')
+                    return redirect(url_for('accept_donation'))
+
+                # Insert new item
+                cursor.execute("INSERT INTO items (name) VALUES (%s)", (item_name,))
+                item_id = connection.insert_id()
+
+                # Find or insert location
+                cursor.execute("SELECT id FROM locations WHERE name = %s", (location_name,))
+                location = cursor.fetchone()
+                if not location:
+                    cursor.execute("INSERT INTO locations (name) VALUES (%s)", (location_name,))
+                    location_id = connection.insert_id()
+                else:
+                    location_id = location['id']
+
+                # Associate item with location
+                cursor.execute("INSERT INTO item_locations (item_id, location_id) VALUES (%s, %s)",
+                               (item_id, location_id))
+
+                connection.commit()
+                flash("Donation accepted successfully!", 'success')
+        except Exception as e:
+            connection.rollback()
+            flash(f"Error: {e}", 'danger')
+        finally:
+            connection.close()
+
+    return render_template('accept_donation.html')
+
+
+Template: templates/accept_donation.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Accept Donation</h1>
+<form method="POST">
+    <label for="donor_id">Donor ID:</label>
+    <input type="text" id="donor_id" name="donor_id" required>
+    <br>
+    <label for="item_name">Item Name:</label>
+    <input type="text" id="item_name" name="item_name" required>
+    <br>
+    <label for="location_name">Location Name:</label>
+    <input type="text" id="location_name" name="location_name" required>
+    <br>
+    <button type="submit">Submit</button>
+</form>
+{% endblock %}
+
+
+
+Feature 2: Rank System – Popular Categories
+Backend Code
+Add this route to app.py:
+
+
+# Route: Rank System (Popular Categories)
+@app.route('/rank_categories', methods=['GET'])
+def rank_categories():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    connection = get_db_connection()
+    category_ranks = []
+    try:
+        with connection.cursor() as cursor:
+            sql = """
+                SELECT categories.name, COUNT(order_items.item_id) AS total_orders
+                FROM order_items
+                JOIN items ON order_items.item_id = items.id
+                JOIN categories ON items.category_id = categories.id
+                GROUP BY categories.id
+                ORDER BY total_orders DESC
+                LIMIT 10
+            """
+            cursor.execute(sql)
+            category_ranks = cursor.fetchall()
+    except Exception as e:
+        flash(f"Error: {e}", 'danger')
+    finally:
+        connection.close()
+
+    return render_template('rank_categories.html', category_ranks=category_ranks)
+
+
+
+Template: templates/rank_categories.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Top 10 Popular Categories</h1>
+<table>
+    <tr>
+        <th>Category</th>
+        <th>Total Orders</th>
+    </tr>
+    {% for category in category_ranks %}
+    <tr>
+        <td>{{ category.name }}</td>
+        <td>{{ category.total_orders }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
+
+
+
+Feature 3: Prepare Order
+Backend Code
+Add this route to app.py:
+
+
+# Route: Prepare Order
+@app.route('/prepare_order', methods=['GET', 'POST'])
+def prepare_order():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        order_id = request.form['order_id']
+        holding_location = 'Ready for Delivery'
+
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                # Update item locations to 'Ready for Delivery'
+                sql = """
+                    UPDATE item_locations
+                    SET location_id = (
+                        SELECT id FROM locations WHERE name = %s
+                    )
+                    WHERE item_id IN (
+                        SELECT item_id FROM order_items WHERE order_id = %s
+                    )
+                """
+                cursor.execute(sql, (holding_location, order_id))
+                connection.commit()
+                flash("Order prepared successfully!", 'success')
+        except Exception as e:
+            connection.rollback()
+            flash(f"Error: {e}", 'danger')
+        finally:
+            connection.close()
+
+    return render_template('prepare_order.html')
+
+
+Template: templates/prepare_order.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Prepare Order</h1>
+<form method="POST">
+    <label for="order_id">Order ID:</label>
+    <input type="text" id="order_id" name="order_id" required>
+    <br>
+    <button type="submit">Prepare</button>
+</form>
+{% endblock %}
+
+
+Database Updates
+Add Donors Table
+
+
+CREATE TABLE donors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+
+
+Add Categories Table
+
+CREATE TABLE categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+ALTER TABLE items ADD category_id INT;
+ALTER TABLE items ADD FOREIGN KEY (category_id) REFERENCES categories(id);
+
+
+Add Holding Location
+
+INSERT INTO locations (name) VALUES ('Ready for Delivery');
+
+Feature 4: Start an Order
+Backend Code
+
+# Route: Start an Order
+@app.route('/start_order', methods=['GET', 'POST'])
+def start_order():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        client_username = request.form['client_username']
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                # Check if client exists
+                cursor.execute("SELECT id FROM users WHERE username = %s AND role = 'client'", (client_username,))
+                client = cursor.fetchone()
+                if not client:
+                    flash("Client does not exist!", 'danger')
+                    return redirect(url_for('start_order'))
+
+                # Create new order
+                cursor.execute("INSERT INTO orders (client_id) VALUES (%s)", (client['id'],))
+                order_id = connection.insert_id()
+                session['current_order_id'] = order_id
+                connection.commit()
+
+                flash(f"Order started successfully! Order ID: {order_id}", 'success')
+        except Exception as e:
+            connection.rollback()
+            flash(f"Error: {e}", 'danger')
+        finally:
+            connection.close()
+
+    return render_template('start_order.html')
+
+
+Template: templates/start_order.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Start a New Order</h1>
+<form method="POST">
+    <label for="client_username">Client Username:</label>
+    <input type="text" id="client_username" name="client_username" required>
+    <br>
+    <button type="submit">Start Order</button>
+</form>
+{% endblock %}
+
+
+Feature 5: Add Items to Current Order
+Backend Code
+
+# Route: Add Items to Current Order
+@app.route('/add_to_order', methods=['GET', 'POST'])
+def add_to_order():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if 'current_order_id' not in session:
+        flash("No active order! Start an order first.", 'danger')
+        return redirect(url_for('start_order'))
+
+    order_id = session['current_order_id']
+    connection = get_db_connection()
+    available_items = []
+
+    if request.method == 'POST':
+        item_id = request.form['item_id']
+        try:
+            with connection.cursor() as cursor:
+                # Add item to order
+                cursor.execute("INSERT INTO order_items (order_id, item_id) VALUES (%s, %s)", (order_id, item_id))
+                connection.commit()
+                flash("Item added to order successfully!", 'success')
+        except Exception as e:
+            connection.rollback()
+            flash(f"Error: {e}", 'danger')
+
+    try:
+        with connection.cursor() as cursor:
+            # Get available items (not yet ordered)
+            sql = """
+                SELECT items.id, items.name
+                FROM items
+                WHERE items.id NOT IN (
+                    SELECT item_id FROM order_items
+                )
+            """
+            cursor.execute(sql)
+            available_items = cursor.fetchall()
+    except Exception as e:
+        flash(f"Error: {e}", 'danger')
+    finally:
+        connection.close()
+
+    return render_template('add_to_order.html', available_items=available_items)
+
+
+Template: templates/add_to_order.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Add Items to Current Order</h1>
+<form method="POST">
+    <label for="item_id">Select Item:</label>
+    <select id="item_id" name="item_id" required>
+        {% for item in available_items %}
+        <option value="{{ item.id }}">{{ item.name }}</option>
+        {% endfor %}
+    </select>
+    <br>
+    <button type="submit">Add to Order</button>
+</form>
+{% endblock %}
+
+
+Feature 6: User Tasks
+Backend Code
+
+# Route: User's Tasks
+@app.route('/user_tasks', methods=['GET'])
+def user_tasks():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    user_id = session['user_id']
+    connection = get_db_connection()
+    tasks = []
+    try:
+        with connection.cursor() as cursor:
+            # Get user's tasks
+            sql = """
+                SELECT orders.id AS order_id, orders.status, users.username AS client_username
+                FROM orders
+                LEFT JOIN users ON orders.client_id = users.id
+                WHERE orders.staff_id = %s OR orders.client_id = %s
+            """
+            cursor.execute(sql, (user_id, user_id))
+            tasks = cursor.fetchall()
+    except Exception as e:
+        flash(f"Error: {e}", 'danger')
+    finally:
+        connection.close()
+
+    return render_template('user_tasks.html', tasks=tasks)
+
+
+Template: templates/user_tasks.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Your Tasks</h1>
+<table>
+    <tr>
+        <th>Order ID</th>
+        <th>Client</th>
+        <th>Status</th>
+    </tr>
+    {% for task in tasks %}
+    <tr>
+        <td>{{ task.order_id }}</td>
+        <td>{{ task.client_username }}</td>
+        <td>{{ task.status }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
+
+
+Feature 7: Year-End Report
+Backend Code
+
+# Route: Year-End Report
+@app.route('/year_end_report', methods=['GET'])
+def year_end_report():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    connection = get_db_connection()
+    report_data = {}
+    try:
+        with connection.cursor() as cursor:
+            # Number of clients served
+            cursor.execute("SELECT COUNT(DISTINCT client_id) AS clients_served FROM orders")
+            report_data['clients_served'] = cursor.fetchone()['clients_served']
+
+            # Items donated per category
+            sql = """
+                SELECT categories.name, COUNT(items.id) AS total_items
+                FROM items
+                JOIN categories ON items.category_id = categories.id
+                GROUP BY categories.id
+            """
+            cursor.execute(sql)
+            report_data['items_by_category'] = cursor.fetchall()
+    except Exception as e:
+        flash(f"Error: {e}", 'danger')
+    finally:
+        connection.close()
+
+    return render_template('year_end_report.html', report_data=report_data)
+
+
+Template: templates/year_end_report.html
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Year-End Report</h1>
+<p>Number of Clients Served: {{ report_data.clients_served }}</p>
+<h2>Items Donated by Category</h2>
+<table>
+    <tr>
+        <th>Category</th>
+        <th>Total Items</th>
+    </tr>
+    {% for category in report_data.items_by_category %}
+    <tr>
+        <td>{{ category.name }}</td>
+        <td>{{ category.total_items }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
+
+
+
+1. Programming Language and Frameworks
+•	Python: The backend logic of the application is written in Python.
+•	Flask: A lightweight web framework for Python used to create web applications.
+________________________________________
+2. Database Management
+•	MySQL or MariaDB: The relational database system to store and manage application data.
+•	MySQL Workbench (optional): A GUI tool for managing MySQL databases.
+•	phpMyAdmin (optional): A web-based interface for managing MySQL databases.
+________________________________________
+3. Web Server
+•	Flask Development Server: Built-in server for local testing and debugging.
+•	Apache or Nginx (optional for deployment): For production-level deployment of the application.
+________________________________________
+4. Development Tools
+•	Code Editor/IDE:
+o	Visual Studio Code (VS Code): Popular editor with Flask and Python support.
+o	PyCharm: IDE with advanced Python features.
+•	Browser: For testing the web interface (Chrome, Firefox, etc.).
+________________________________________
+5. Python Libraries
+Install the following libraries via pip:
+•	Flask: Web framework.
+•	PyMySQL: Python library to connect and interact with MySQL databases.
+•	Flask-WTF: For form handling (optional for more complex forms).
+•	Flask-Session: For session management.
+•	Flask-Bcrypt: For password hashing and authentication.
+Install them using:
+bash
+Copy code
+pip install flask pymysql flask-wtf flask-session flask-bcrypt
+________________________________________
+6. Database Schema
+•	Set up the database tables based on your ER model/schema. Use MySQL Workbench or a .sql script to initialize the database. Make sure the tables and relationships are aligned with your application requirements.
+________________________________________
+7. Environment Setup
+•	Python Environment: Use venv or conda to create a virtual environment.
+bash
+Copy code
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+________________________________________
+8. Testing Tools
+•	Postman or Curl: To test API endpoints if you're developing APIs.
+•	Browser Developer Tools: Built-in tools in Chrome/Firefox to debug the web interface.
+________________________________________
+9. Deployment (Optional)
+•	Use Docker for containerizing your application.
+•	Use Heroku, AWS, or DigitalOcean to host your application.
+________________________________________
+10. Additional Recommendations
+•	Version Control: Use Git and GitHub for version control.
+•	Debugging Tools: Enable Flask's debugging mode for error tracking during development.
+________________________________________
+Workflow Summary
+1.	Install MySQL and set up your database.
+2.	Set up your Python environment and install the required libraries.
+3.	Create the Flask project and configure it to connect to your database.
+4.	Use a code editor like VS Code to write and test the Flask application.
+5.	Test the application locally using the Flask development server.
+6.	(Optional) Deploy the application on a production server.
+
