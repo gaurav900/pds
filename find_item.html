@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Find Item</h1>
+<form method="POST">
+    <label for="item_id">Item ID:</label>
+    <input type="text" id="item_id" name="item_id" required>
+    <button type="submit">Search</button>
+</form>
+{% if item_locations %}
+    <h2>Locations</h2>
+    <ul>
+    {% for location in item_locations %}
+        <li>{{ location.location_name }}</li>
+    {% endfor %}
+    </ul>
+{% endif %}
+{% endblock %}
