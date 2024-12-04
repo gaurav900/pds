@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Top 10 Popular Categories</h1>
+<table>
+    <tr>
+        <th>Category</th>
+        <th>Total Orders</th>
+    </tr>
+    {% for category in category_ranks %}
+    <tr>
+        <td>{{ category.name }}</td>
+        <td>{{ category.total_orders }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
