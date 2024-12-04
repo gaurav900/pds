@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Prepare Order</h1>
+<form method="POST">
+    <label for="order_id">Order ID:</label>
+    <input type="text" id="order_id" name="order_id" required>
+    <br>
+    <button type="submit">Prepare</button>
+</form>
+{% endblock %}
