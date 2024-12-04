@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Year-End Report</h1>
+<p>Number of Clients Served: {{ report_data.clients_served }}</p>
+<h2>Items Donated by Category</h2>
+<table>
+    <tr>
+        <th>Category</th>
+        <th>Total Items</th>
+    </tr>
+    {% for category in report_data.items_by_category %}
+    <tr>
+        <td>{{ category.name }}</td>
+        <td>{{ category.total_items }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
