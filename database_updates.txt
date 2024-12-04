@@ -1,0 +1,21 @@
+CREATE TABLE donors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+
+
+Add Categories Table
+
+CREATE TABLE categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+ALTER TABLE items ADD category_id INT;
+ALTER TABLE items ADD FOREIGN KEY (category_id) REFERENCES categories(id);
+
+
+Add Holding Location
+
+INSERT INTO locations (name) VALUES ('Ready for Delivery');
